@@ -5,11 +5,13 @@ namespace MyPlot\subcommand;
 
 use MyPlot\forms\interfaces\MyPlotForm;
 use MyPlot\forms\subforms\UnBanPlayerForm;
-use MyPlot\MyPlot;
 use MyPlot\Plot;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
+use function array_map;
+use function array_search;
+use function strtolower;
 
 class UnBanSubCommand extends SubCommand
 {
@@ -18,12 +20,6 @@ class UnBanSubCommand extends SubCommand
         return ($sender instanceof Player) and $sender->hasPermission("myplot.command.unbanplayer");
     }
 
-    /**
-     * @param Player $sender
-     * @param string[] $args
-     *
-     * @return bool
-     */
     public function execute(CommandSender $sender, array $args): bool
     {
         if (count($args) === 0) {
@@ -39,14 +35,19 @@ class UnBanSubCommand extends SubCommand
             $sender->sendMessage(TextFormat::RED . $this->translateString("notowner"));
             return true;
         }
-        if (MyPlot::essentialsExists()) {
-            $ess = $this->plugin->getEssentials();
-            $dplayer = $ess->getPlayerManager()->getBestMatchingPlayer($dplayerName);
+
+        $dplayer = $this->plugin->matchOnlinePlayer($dplayerName);
+        if ($dplayer instanceof Player) {
+            $dplayerName = $dplayer->getName();
         } else {
-            $dplayer = $this->plugin->getServer()->getPlayerByPrefix($dplayerName);
+            $bannedKey = array_search(strtolower($dplayerName), array_map('strtolower', $plot->banned), true);
+            if ($bannedKey !== false) {
+                $dplayerName = $plot->banned[$bannedKey];
+            }
         }
-        if ($this->plugin->removePlotDenied($plot, $dplayer->getName())) {
-            $sender->sendMessage($this->translateString("unbanplayer.success1", [$dplayer->getName()]));
+
+        if ($this->plugin->removePlotDenied($plot, $dplayerName)) {
+            $sender->sendMessage($this->translateString("unbanplayer.success1", [$dplayerName]));
             if ($dplayer instanceof Player) {
                 $dplayer->sendMessage($this->translateString("unbanplayer.success2", [$plot->X, $plot->Z, $sender->getName()]));
             }
@@ -58,8 +59,9 @@ class UnBanSubCommand extends SubCommand
 
     public function getForm(?Player $player = null): ?MyPlotForm
     {
-        if ($player !== null and ($plot = $this->plugin->getPlotByPosition($player->getPosition())) instanceof Plot)
+        if ($player !== null and ($plot = $this->plugin->getPlotByPosition($player->getPosition())) instanceof Plot) {
             return new UnBanPlayerForm($plot);
+        }
         return null;
     }
 }

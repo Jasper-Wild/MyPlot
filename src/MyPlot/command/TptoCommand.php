@@ -3,8 +3,7 @@ declare(strict_types=1);
 
 namespace MyPlot\command;
 
-use NetherGames\NGEssentials\player\permissions\Permissions;
-use NetherGames\NGEssentials\player\Translator;
+use MyPlot\MyPlotPermissions;
 use pocketmine\command\CommandSender;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\player\Player;
@@ -12,16 +11,16 @@ use function count;
 
 class TptoCommand extends BaseCommand
 {
-    /** @var array */
-    private $requests = [];
+    /** @var array<string, array<string, string>> */
+    private array $requests = [];
 
     public function __construct()
     {
         parent::__construct('tpto');
 
-        $this->setPermission(Permissions::DEFAULT_COMMAND_PERMISSION);
+        $this->setPermission(MyPlotPermissions::DEFAULT_COMMAND_PERMISSION);
         $this->setDescription('Command used for sending and accepting teleport requests');
-        $this->setUsage('§cUsage: /tpto <accept {player} | decline {player} | {player}>');
+        $this->setUsage('/tpto <accept {player} | decline {player} | {player}>');
     }
 
     public function execute(CommandSender $sender, string $commandLabel, array $args): bool
@@ -32,54 +31,49 @@ class TptoCommand extends BaseCommand
             }
 
             if ($args[0] === 'a' || $args[0] === 'accept') {
-                if (isset($args[1])) {
-                    if (($player = $this->getPlugin()->getServer()->getPlayerExact($args[1])) instanceof Player) {
-                        if (isset($this->requests[$sender->getName()][$player->getName()])) {
-                            $player->teleport($sender->getPosition());
-                            Translator::sendMessage($sender, "command.tpto.accepted.receiver", Translator::TYPE_SUCCESS, ...["sender" => $player->getName()]);
-                            Translator::sendMessage($sender, "command.tpto.accepted.sender", Translator::TYPE_SUCCESS, ...["receiver" => $sender->getName()]);
-                            unset($this->requests[$sender->getName()][$player->getName()]);
-                        } else {
-                            Translator::sendMessage($sender, "command.tpto.norequest", Translator::TYPE_ERROR);
-                        }
+                if (!isset($args[1])) {
+                    $this->getPlugin()->sendError($sender, 'Specify a player.');
+                } elseif (($player = $this->getPlugin()->getServer()->getPlayerExact($args[1])) instanceof Player) {
+                    if (isset($this->requests[$sender->getName()][$player->getName()])) {
+                        $player->teleport($sender->getPosition());
+                        $this->getPlugin()->sendSuccess($sender, "Accepted the teleport request from {$player->getName()}.");
+                        $this->getPlugin()->sendSuccess($player, "{$sender->getName()} accepted your teleport request.");
+                        unset($this->requests[$sender->getName()][$player->getName()]);
                     } else {
-                        Translator::sendMessage($sender, "player.offline", Translator::TYPE_ERROR);
+                        $this->getPlugin()->sendError($sender, 'You do not have a pending request from that player.');
                     }
                 } else {
-                    Translator::sendMessage($sender, "command.tp.specify", Translator::TYPE_ERROR);
+                    $this->getPlugin()->sendError($sender, 'That player is not online.');
                 }
             } elseif ($args[0] === 'd' || $args[0] === 'decline') {
-                if (isset($args[1])) {
-                    if (($player = $this->getPlugin()->getServer()->getPlayerExact($args[1])) instanceof Player) {
-                        if (isset($this->requests[$sender->getName()][$player->getName()])) {
-                            Translator::sendMessage($sender, "command.tpto.declined.receiver", Translator::TYPE_INFO, ...["sender" => $player->getName()]);
-                            Translator::sendMessage($player, "command.tpto.declined.sender", Translator::TYPE_INFO, ...["receiver" => $sender->getName()]);
-                            unset($this->requests[$sender->getName()][$player->getName()]);
-                        } else {
-                            Translator::sendMessage($sender, "command.tpto.norequest", Translator::TYPE_ERROR);
-                        }
+                if (!isset($args[1])) {
+                    $this->getPlugin()->sendError($sender, 'Specify a player.');
+                } elseif (($player = $this->getPlugin()->getServer()->getPlayerExact($args[1])) instanceof Player) {
+                    if (isset($this->requests[$sender->getName()][$player->getName()])) {
+                        $this->getPlugin()->sendInfo($sender, "Declined the teleport request from {$player->getName()}.");
+                        $this->getPlugin()->sendInfo($player, "{$sender->getName()} declined your teleport request.");
+                        unset($this->requests[$sender->getName()][$player->getName()]);
                     } else {
-                        Translator::sendMessage($sender, "player.offline", Translator::TYPE_ERROR);
+                        $this->getPlugin()->sendError($sender, 'You do not have a pending request from that player.');
                     }
                 } else {
-                    Translator::sendMessage($sender, "command.tp.specify", Translator::TYPE_ERROR);
+                    $this->getPlugin()->sendError($sender, 'That player is not online.');
                 }
             } elseif (($player = $this->getPlugin()->getServer()->getPlayerExact($args[0])) instanceof Player) {
-                if ($sender->hasPermission(Permissions::RANK_EMERALD)) {
+                if ($sender->hasPermission(MyPlotPermissions::RANK_EMERALD)) {
                     $this->requests[$player->getName()][$sender->getName()] = $sender->getName();
-                    Translator::sendMessage($sender, "command.tpto.send", Translator::TYPE_SUCCESS, ...["receiver" => $player->getName()]);
-                    Translator::sendMessage($player, "command.tpto.receive", Translator::TYPE_INFO, ...["sender" => $sender->getName()]);
+                    $this->getPlugin()->sendSuccess($sender, "Teleport request sent to {$player->getName()}.");
+                    $this->getPlugin()->sendInfo($player, "{$sender->getName()} wants to teleport to you. Use /tpto accept {$sender->getName()} or /tpto decline {$sender->getName()}.");
                 } else {
-                    Translator::sendMessage($sender, "command.tpto.noperm", Translator::TYPE_ERROR);
+                    $this->getPlugin()->sendError($sender, 'You need the MyPlot emerald permission to send teleport requests.');
                 }
             } else {
                 throw new InvalidCommandSyntaxException();
             }
         } else {
-            $sender->sendMessage($this->getPlugin()->getEssentials()->getPrefix() . '§cThat command can only be run in-game.');
+            $this->sendPlayerOnlyMessage($sender);
         }
 
         return true;
     }
-
 }

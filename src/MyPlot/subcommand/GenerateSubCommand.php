@@ -30,11 +30,16 @@ class GenerateSubCommand extends SubCommand
             return false;
         }
         $levelName = $args[0];
+        $generatorName = $this->plugin->normalizeGeneratorName($args[2] ?? MyPlotGenerator::NAME);
         if ($sender->getServer()->getWorldManager()->isWorldGenerated($levelName)) {
             $sender->sendMessage(TextFormat::RED . $this->translateString("generate.exists", [$levelName]));
             return true;
         }
-        if ($this->plugin->generateWorld($levelName, $args[2] ?? MyPlotGenerator::NAME)) {
+        if (!$this->plugin->isGeneratorRegistered($generatorName)) {
+            $sender->sendMessage(TextFormat::RED . $this->translateString("generate.gexists", [$generatorName]));
+            return true;
+        }
+        if ($this->plugin->generateWorld($levelName, $generatorName)) {
             if (isset($args[1]) and $args[1] == true and $sender instanceof Player) {
                 $this->plugin->teleportPlayerToPlot($sender, new Plot($levelName, 0, 0));
             }

@@ -7,7 +7,7 @@ use libforms\elements\Button;
 use libforms\elements\ImageButton;
 use MyPlot\forms\SimpleMyPlotForm;
 use MyPlot\MyPlot;
-use NetherGames\NGEssentials\player\permissions\Permissions;
+use MyPlot\MyPlotPermissions;
 use pocketmine\network\mcpe\protocol\SetTimePacket;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
@@ -17,7 +17,6 @@ use function in_array;
 
 class TimeForm extends SimpleMyPlotForm
 {
-
     public function __construct(Player $player)
     {
         $plugin = MyPlot::getInstance();
@@ -66,8 +65,8 @@ class TimeForm extends SimpleMyPlotForm
 
     public function preHandle(Player $player): bool
     {
-        if (MyPlot::essentialsExists() && !$player->hasPermission(Permissions::RANK_LEGEND)) {
-            $player->sendMessage("§cYou don't have permission to change the time for your plot. Buy the §l§bLEGEND §r§crank at §bngmc.co/store §cto change it!");
+        if (!$player->hasPermission(MyPlotPermissions::RANK_LEGEND)) {
+            MyPlot::getInstance()->sendError($player, 'You need the MyPlot legend permission to change your plot time.');
             return false;
         }
 

@@ -4,11 +4,11 @@ declare(strict_types=1);
 namespace MyPlot\forms\subforms;
 
 use libforms\elements\Input;
-use libforms\elements\Slider;
 use libforms\elements\Toggle;
 use MyPlot\forms\ComplexMyPlotForm;
 use MyPlot\forms\interfaces\PlotAdminForm;
 use MyPlot\MyPlot;
+use MyPlot\MyPlotGenerator;
 use MyPlot\Plot;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
@@ -19,66 +19,46 @@ class GenerateForm extends ComplexMyPlotForm implements PlotAdminForm
     public function __construct()
     {
         $plugin = MyPlot::getInstance();
+        $defaultSettings = $plugin->getDefaultWorldSettings();
+        $settingKeys = array_keys($defaultSettings);
 
         $elements = [
             "world" => new Input($plugin->getLanguage()->get("generate.formworld"), "plots"),
-            "generator" => new Input($plugin->getLanguage()->get("generate.formgenerator"), "", "myplot")
+            "generator" => new Input($plugin->getLanguage()->get("generate.formgenerator"), "", MyPlotGenerator::NAME)
         ];
 
-        foreach ($plugin->getConfig()->get("DefaultWorld", []) as $key => $value) {
-            if (is_numeric($value)) {
-                if ($value > 0) {
-                    $slider = new Slider($key, 1, 4 * (int)$value);
-                    $slider->setStep(1);
-                    $slider->setDefault((int)$value);
-                    $elements[$key] = $slider;
-                } else {
-                    $slider = new Slider($key, 1, 1000);
-                    $slider->setStep(1);
-                    $slider->setDefault(1);
-                    $elements[$key] = $slider;
-                }
-            } elseif (is_bool($value)) {
-                $elements[$key] = new Toggle($key, $value);
-            } elseif (is_string($value)) {
-                $elements[$key] = new Input($key, "", $value);
-            }
+        foreach ($defaultSettings as $key => $value) {
+            $elements[$key] = is_bool($value)
+                ? new Toggle($key, $value)
+                : new Input($key, "", (string) $value);
         }
 
-        $elements["teleport"] = new Toggle($plugin->getLanguage()->get("generate.formteleport"));
+        $elements["teleport"] = new Toggle($plugin->getLanguage()->get("generate.formteleport"), false);
 
         parent::__construct(
             null,
             TextFormat::BLACK . $plugin->getLanguage()->translateString("form.header", [$plugin->getLanguage()->get("generate.form")]),
             $elements,
-            function (Player $player, ?array $data = []) use ($plugin) {
-                $worldName = array_shift($data);
+            function (Player $player, ?array $data = []) use ($plugin, $settingKeys) {
+                $worldName = trim((string) array_shift($data));
                 if ($player->getServer()->getWorldManager()->isWorldGenerated($worldName)) {
                     $player->sendMessage(TextFormat::RED . $plugin->getLanguage()->translateString("generate.exists", [$worldName]));
                     return;
                 }
+                $generatorName = $plugin->normalizeGeneratorName((string) array_shift($data));
+                if (!$plugin->isGeneratorRegistered($generatorName)) {
+                    $player->sendMessage(TextFormat::RED . $plugin->getLanguage()->translateString("generate.gexists", [$generatorName]));
+                    return;
+                }
 
-                $teleport = array_pop($data);
-                // TODO: fix.. maybe?
-//				$blockIds = array_slice($data, -5, 5, true);
-//				$blockIds = array_map(function($val) {
-//					if(str_contains($val, ':')) {
-//						$peices = explode(':', $val);
-//						if(defined(BlockLegacyIds::class."::".strtoupper(str_replace(' ', '_', $peices[0]))))
-//							return constant(BlockLegacyIds::class."::".strtoupper(str_replace(' ', '_', $val))).':'.($peices[1] ?? 0);
-//						return $val;
-//					}elseif(is_numeric($val))
-//						return $val.':0';
-//					elseif(defined(BlockLegacyIds::class."::".strtoupper(str_replace(' ', '_', $val))))
-//						return constant(BlockLegacyIds::class."::".strtoupper(str_replace(' ', '_', $val))).':0';
-//					return $val;
-//				}, $blockIds);
-//
-//				foreach($blockIds as $key => $val) {
-//                    $data[$key] = $val;
-//                }
+                $settings = [];
+                foreach ($settingKeys as $key) {
+                    $settings[$key] = array_shift($data);
+                }
+                $settings = $plugin->normalizeWorldSettings($settings);
+                $teleport = $plugin->normalizeBooleanInput(array_shift($data), false);
 
-                if ($plugin->generateWorld($worldName, array_shift($data), [])) {
+                if ($plugin->generateWorld($worldName, $generatorName, $settings)) {
                     if ($teleport) {
                         $plugin->teleportPlayerToPlot($player, new Plot($worldName, 0, 0));
                     }

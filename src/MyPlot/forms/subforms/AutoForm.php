@@ -6,7 +6,6 @@ namespace MyPlot\forms\subforms;
 use MyPlot\forms\ComplexMyPlotForm;
 use MyPlot\forms\interfaces\PlotButtonForm;
 use MyPlot\MyPlot;
-use NetherGames\NGEssentials\player\permissions\Permissions;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 

@@ -7,7 +7,6 @@ use MyPlot\forms\ComplexMyPlotForm;
 use MyPlot\forms\interfaces\PlotButtonForm;
 use MyPlot\MyPlot;
 use MyPlot\Plot;
-use NetherGames\NGEssentials\player\permissions\Permissions;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 use function count;

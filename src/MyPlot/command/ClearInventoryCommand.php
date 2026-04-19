@@ -3,21 +3,19 @@ declare(strict_types=1);
 
 namespace MyPlot\command;
 
-use NetherGames\NGEssentials\player\permissions\Permissions;
-use NetherGames\NGEssentials\player\Translator;
+use MyPlot\MyPlotPermissions;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 
 class ClearInventoryCommand extends BaseCommand
 {
-
     public function __construct()
     {
         parent::__construct('clearinventory');
 
         $this->setAliases(['ci']);
-        $this->setPermission(Permissions::RANK_LEGEND);
-        $this->setPermissionMessage('command.ci.noperm');
+        $this->setPermission(MyPlotPermissions::RANK_LEGEND);
+        $this->setPermissionMessage('You need the MyPlot legend permission to use this command.');
         $this->setDescription('Command used for clearing your inventory for Legend players');
     }
 
@@ -25,12 +23,11 @@ class ClearInventoryCommand extends BaseCommand
     {
         if ($sender instanceof Player) {
             $sender->getInventory()->clearAll();
-            Translator::sendMessage($sender, "command.ci.completed", Translator::TYPE_SUCCESS);
+            $this->getPlugin()->sendSuccess($sender, 'Your inventory was cleared.');
         } else {
-            $sender->sendMessage($this->getPlugin()->getEssentials()->getPrefix() . '§cThat command can only be run in-game.');
+            $this->sendPlayerOnlyMessage($sender);
         }
 
         return true;
     }
-
 }

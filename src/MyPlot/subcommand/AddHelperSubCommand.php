@@ -5,7 +5,6 @@ namespace MyPlot\subcommand;
 
 use MyPlot\forms\interfaces\MyPlotForm;
 use MyPlot\forms\subforms\AddHelperForm;
-use MyPlot\MyPlot;
 use MyPlot\Plot;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
@@ -18,12 +17,6 @@ class AddHelperSubCommand extends SubCommand
         return ($sender instanceof Player) and $sender->hasPermission("myplot.command.addhelper");
     }
 
-    /**
-     * @param Player $sender
-     * @param string[] $args
-     *
-     * @return bool
-     */
     public function execute(CommandSender $sender, array $args): bool
     {
         if (count($args) === 0) {
@@ -39,14 +32,12 @@ class AddHelperSubCommand extends SubCommand
             $sender->sendMessage(TextFormat::RED . $this->translateString("notowner"));
             return true;
         }
-        if (MyPlot::essentialsExists()) {
-            $ess = $this->plugin->getEssentials();
-            $helper = $ess->getPlayerManager()->getBestMatchingPlayer($helperName);
-        } else {
-            $helper = $this->plugin->getServer()->getPlayerByPrefix($helperName);
-        }
-        if ($this->plugin->addPlotHelper($plot, $helper->getName())) {
-            $sender->sendMessage($this->translateString("addhelper.success", [$helper->getName()]));
+
+        $helper = $this->plugin->matchOnlinePlayer($helperName);
+        $helperName = $helper?->getName() ?? $helperName;
+
+        if ($this->plugin->addPlotHelper($plot, $helperName)) {
+            $sender->sendMessage($this->translateString("addhelper.success", [$helperName]));
         } else {
             $sender->sendMessage(TextFormat::RED . $this->translateString("error"));
         }
@@ -55,8 +46,9 @@ class AddHelperSubCommand extends SubCommand
 
     public function getForm(?Player $player = null): ?MyPlotForm
     {
-        if ($player !== null and ($plot = $this->plugin->getPlotByPosition($player->getPosition())) instanceof Plot)
+        if ($player !== null and ($plot = $this->plugin->getPlotByPosition($player->getPosition())) instanceof Plot) {
             return new AddHelperForm($plot);
+        }
         return null;
     }
 }

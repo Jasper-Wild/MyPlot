@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MyPlot\command;
 
 use MyPlot\MyPlot;
+use pocketmine\command\CommandSender;
 use pocketmine\command\Command;
 
 abstract class BaseCommand extends Command
@@ -27,5 +28,10 @@ abstract class BaseCommand extends Command
     public function getPlugin(): MyPlot
     {
         return MyPlot::getInstance();
+    }
+
+    protected function sendPlayerOnlyMessage(CommandSender $sender): void
+    {
+        $this->getPlugin()->sendError($sender, "That command can only be run in-game.");
     }
 }

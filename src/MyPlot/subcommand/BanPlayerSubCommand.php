@@ -5,42 +5,28 @@ namespace MyPlot\subcommand;
 
 use MyPlot\forms\interfaces\MyPlotForm;
 use MyPlot\forms\subforms\BanPlayerForm;
-use MyPlot\MyPlot;
+use MyPlot\MyPlotPermissions;
 use MyPlot\Plot;
-use NetherGames\NGEssentials\player\permissions\Permissions;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 
 class BanPlayerSubCommand extends SubCommand
 {
-    /**
-     * @param CommandSender $sender
-     *
-     * @return bool
-     */
     public function canUse(CommandSender $sender): bool
     {
-        if (MyPlot::essentialsExists()) {
-            return ($sender instanceof Player) and $sender->hasPermission("myplot.command.banplayer") and $sender->hasPermission(Permissions::RANK_LEGEND);
-        } else {
-            return ($sender instanceof Player) and $sender->hasPermission("myplot.command.banplayer");
-        }
+        return ($sender instanceof Player)
+            && $sender->hasPermission("myplot.command.banplayer")
+            && $sender->hasPermission(MyPlotPermissions::RANK_LEGEND);
     }
 
-    /**
-     * @param Player $sender
-     * @param string[] $args
-     *
-     * @return bool
-     */
     public function execute(CommandSender $sender, array $args): bool
     {
         if (empty($args)) {
             return false;
         }
-        if (MyPlot::essentialsExists() && !$sender->hasPermission(Permissions::RANK_LEGEND)) {
-            $sender->sendMessage("§cYou don't have permission to ban other players from accessing your plot. Buy the §l§bLEGEND §r§crank at §bngmc.co/store §cto ban them!");
+        if (!$sender->hasPermission(MyPlotPermissions::RANK_LEGEND)) {
+            $this->plugin->sendError($sender, 'You need the MyPlot legend permission to ban players from your plot.');
             return true;
         }
         $dplayer = $args[0];
@@ -57,9 +43,14 @@ class BanPlayerSubCommand extends SubCommand
             if ($this->getPlugin()->addPlotDenied($plot, $dplayer)) {
                 $sender->sendMessage($this->translateString("banplayer.success1", [$dplayer]));
                 foreach ($this->getPlugin()->getServer()->getOnlinePlayers() as $player) {
-                    if ($this->getPlugin()->getPlotBB($plot)->isVectorInside($player->getPosition()) and !($player->getName() === $plot->owner) and !$player->hasPermission("myplot.admin.banplayer.bypass") and !$plot->isHelper($player->getName()))
+                    if (
+                        $this->getPlugin()->getPlotBB($plot)->isVectorInside($player->getPosition())
+                        and $player->getName() !== $plot->owner
+                        and !$player->hasPermission("myplot.admin.banplayer.bypass")
+                        and !$plot->isHelper($player->getName())
+                    ) {
                         $this->getPlugin()->teleportPlayerToPlot($player, $plot);
-                    else {
+                    } else {
                         $sender->sendMessage($this->translateString("banplayer.cannotban", [$player->getName()]));
                         $player->sendMessage($this->translateString("banplayer.attemptedban", [$sender->getName()]));
                     }
@@ -69,8 +60,8 @@ class BanPlayerSubCommand extends SubCommand
             }
             return true;
         }
-        $ess = $this->plugin->getEssentials();
-        $dplayer = $ess->getPlayerManager()->getBestMatchingPlayer($dplayer);
+
+        $dplayer = $this->plugin->matchOnlinePlayer($dplayer);
         if (!$dplayer instanceof Player) {
             $sender->sendMessage($this->translateString("banplayer.notaplayer"));
             return true;
@@ -83,8 +74,9 @@ class BanPlayerSubCommand extends SubCommand
         if ($this->getPlugin()->addPlotDenied($plot, $dplayer->getName())) {
             $sender->sendMessage($this->translateString("banplayer.success1", [$dplayer->getName()]));
             $dplayer->sendMessage($this->translateString("banplayer.success2", [$plot->X, $plot->Z, $sender->getName()]));
-            if ($this->getPlugin()->getPlotBB($plot)->isVectorInside($dplayer->getPosition()))
+            if ($this->getPlugin()->getPlotBB($plot)->isVectorInside($dplayer->getPosition())) {
                 $this->getPlugin()->teleportPlayerToPlot($dplayer, $plot);
+            }
         } else {
             $sender->sendMessage(TextFormat::RED . $this->translateString("error"));
         }
@@ -93,8 +85,9 @@ class BanPlayerSubCommand extends SubCommand
 
     public function getForm(?Player $player = null): ?MyPlotForm
     {
-        if ($player !== null and ($plot = $this->getPlugin()->getPlotByPosition($player->getPosition())) instanceof Plot)
+        if ($player !== null and ($plot = $this->getPlugin()->getPlotByPosition($player->getPosition())) instanceof Plot) {
             return new BanPlayerForm($plot);
+        }
         return null;
     }
 }

@@ -5,11 +5,13 @@ namespace MyPlot\subcommand;
 
 use MyPlot\forms\interfaces\MyPlotForm;
 use MyPlot\forms\subforms\RemoveHelperForm;
-use MyPlot\MyPlot;
 use MyPlot\Plot;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
+use function array_map;
+use function array_search;
+use function strtolower;
 
 class RemoveHelperSubCommand extends SubCommand
 {
@@ -18,12 +20,6 @@ class RemoveHelperSubCommand extends SubCommand
         return ($sender instanceof Player) and $sender->hasPermission("myplot.command.removehelper");
     }
 
-    /**
-     * @param Player $sender
-     * @param string[] $args
-     *
-     * @return bool
-     */
     public function execute(CommandSender $sender, array $args): bool
     {
         if (count($args) === 0) {
@@ -39,14 +35,19 @@ class RemoveHelperSubCommand extends SubCommand
             $sender->sendMessage(TextFormat::RED . $this->translateString("notowner"));
             return true;
         }
-        if (MyPlot::essentialsExists()) {
-            $ess = $this->plugin->getEssentials();
-            $helper = $ess->getPlayerManager()->getBestMatchingPlayer($helperName);
+
+        $helper = $this->plugin->matchOnlinePlayer($helperName);
+        if ($helper instanceof Player) {
+            $helperName = $helper->getName();
         } else {
-            $helper = $this->plugin->getServer()->getPlayerByPrefix($helperName);
+            $helperKey = array_search(strtolower($helperName), array_map('strtolower', $plot->helpers), true);
+            if ($helperKey !== false) {
+                $helperName = $plot->helpers[$helperKey];
+            }
         }
-        if ($this->plugin->removePlotHelper($plot, $helper->getName())) {
-            $sender->sendMessage($this->translateString("removehelper.success", [$helper->getName()]));
+
+        if ($this->plugin->removePlotHelper($plot, $helperName)) {
+            $sender->sendMessage($this->translateString("removehelper.success", [$helperName]));
         } else {
             $sender->sendMessage(TextFormat::RED . $this->translateString("error"));
         }
@@ -55,8 +56,9 @@ class RemoveHelperSubCommand extends SubCommand
 
     public function getForm(?Player $player = null): ?MyPlotForm
     {
-        if ($player !== null and ($plot = $this->plugin->getPlotByPosition($player->getPosition())) instanceof Plot)
+        if ($player !== null and ($plot = $this->plugin->getPlotByPosition($player->getPosition())) instanceof Plot) {
             return new RemoveHelperForm($plot);
+        }
         return null;
     }
 }

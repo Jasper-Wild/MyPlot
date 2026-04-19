@@ -5,8 +5,7 @@ namespace MyPlot\subcommand;
 
 use MyPlot\forms\interfaces\MyPlotForm;
 use MyPlot\forms\subforms\TimeForm;
-use MyPlot\MyPlot;
-use NetherGames\NGEssentials\player\permissions\Permissions;
+use MyPlot\MyPlotPermissions;
 use pocketmine\command\CommandSender;
 use pocketmine\network\mcpe\protocol\SetTimePacket;
 use pocketmine\player\Player;
@@ -23,8 +22,8 @@ class TimeSubCommand extends SubCommand
         if (!$sender instanceof Player) {
             return true;
         }
-        if (MyPlot::essentialsExists() && !$sender->hasPermission(Permissions::RANK_LEGEND)) {
-            $sender->sendMessage("§cYou don't have permission to change the time for your plot. Buy the §l§bLEGEND §r§crank at §bngmc.co/store §cto change it!");
+        if (!$sender->hasPermission(MyPlotPermissions::RANK_LEGEND)) {
+            $this->plugin->sendError($sender, 'You need the MyPlot legend permission to change your plot time.');
         } else {
             if (count($args) !== 1) {
                 return false;
@@ -41,10 +40,7 @@ class TimeSubCommand extends SubCommand
         return true;
     }
 
-    /**
-     * @param mixed $value
-     */
-    private function getInteger($value, int $min = 30000000, int $max = -30000000): int
+    private function getInteger(mixed $value, int $min = 30000000, int $max = -30000000): int
     {
         $i = (int)$value;
         if ($i < $min) {

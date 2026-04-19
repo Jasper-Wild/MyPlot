@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPlot\command;
 
 use MyPlot\forms\MainForm;
-use NetherGames\NGEssentials\player\permissions\Permissions;
+use MyPlot\MyPlotPermissions;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 
@@ -14,7 +14,7 @@ class MegaCreativeCommand extends BaseCommand
     {
         parent::__construct('megacreative');
 
-        $this->setPermission(Permissions::DEFAULT_COMMAND_PERMISSION);
+        $this->setPermission(MyPlotPermissions::DEFAULT_COMMAND_PERMISSION);
         $this->setAliases(['mc']);
         $this->setDescription('Command used for teleporting to Mega Creative');
     }
@@ -26,10 +26,9 @@ class MegaCreativeCommand extends BaseCommand
             $form = new MainForm($sender, $this->getPlugin()->getCommands()->getCommands());
             $form->sendForm();
         } else {
-            $sender->sendMessage($this->getPlugin()->getEssentials()->getPrefix() . '§cThat command can only be run in-game.');
+            $this->sendPlayerOnlyMessage($sender);
         }
 
         return true;
     }
-
 }

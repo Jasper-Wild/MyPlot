@@ -5,11 +5,11 @@ namespace MyPlot\subcommand;
 
 use MyPlot\forms\interfaces\MyPlotForm;
 use MyPlot\forms\subforms\GiveForm;
-use MyPlot\MyPlot;
 use MyPlot\Plot;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
+use function count;
 
 class GiveSubCommand extends SubCommand
 {
@@ -18,18 +18,12 @@ class GiveSubCommand extends SubCommand
         return ($sender instanceof Player) and $sender->hasPermission("myplot.command.give");
     }
 
-    /**
-     * @param Player $sender
-     * @param string[] $args
-     *
-     * @return bool
-     */
     public function execute(CommandSender $sender, array $args): bool
     {
         if (count($args) === 0) {
             return false;
         }
-        $newOwner = $args[0];
+        $newOwner = $this->plugin->matchOnlinePlayer($args[0]);
         $plot = $this->plugin->getPlotByPosition($sender->getPosition());
         if ($plot === null) {
             $sender->sendMessage(TextFormat::RED . $this->translateString("notinplot"));
@@ -38,12 +32,6 @@ class GiveSubCommand extends SubCommand
         if ($plot->owner !== $sender->getName()) {
             $sender->sendMessage(TextFormat::RED . $this->translateString("notowner"));
             return true;
-        }
-        if (MyPlot::essentialsExists()) {
-            $ess = $this->plugin->getEssentials();
-            $newOwner = $ess->getPlayerManager()->getBestMatchingPlayer($newOwner);
-        } else {
-            $newOwner = $this->plugin->getServer()->getPlayerByPrefix($newOwner);
         }
         if (!$newOwner instanceof Player) {
             $sender->sendMessage(TextFormat::RED . $this->translateString("give.notonline"));
@@ -84,8 +72,9 @@ class GiveSubCommand extends SubCommand
 
     public function getForm(?Player $player = null): ?MyPlotForm
     {
-        if ($player !== null and $this->plugin->getPlotByPosition($player->getPosition()) instanceof Plot)
+        if ($player !== null and $this->plugin->getPlotByPosition($player->getPosition()) instanceof Plot) {
             return new GiveForm();
+        }
         return null;
     }
 }
