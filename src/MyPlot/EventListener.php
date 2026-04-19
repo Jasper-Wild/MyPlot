@@ -8,7 +8,7 @@ use MyPlot\events\MyPlotBorderChangeEvent;
 use MyPlot\events\MyPlotPlayerEnterPlotEvent;
 use MyPlot\events\MyPlotPlayerLeavePlotEvent;
 use MyPlot\events\MyPlotPvpEvent;
-use NetherGames\NGEssentials\player\permissions\Permissions;
+use MyPlot\MyPlotPermissions;
 use pocketmine\block\Block;
 use pocketmine\block\Liquid;
 use pocketmine\block\Sapling;
@@ -30,7 +30,9 @@ use pocketmine\event\player\PlayerChatEvent;
 use pocketmine\event\player\PlayerDropItemEvent;
 use pocketmine\event\player\PlayerInteractEvent;
 use pocketmine\event\player\PlayerItemConsumeEvent;
+use pocketmine\event\player\PlayerJoinEvent;
 use pocketmine\event\player\PlayerMoveEvent;
+use pocketmine\event\player\PlayerQuitEvent;
 use pocketmine\event\server\CommandEvent;
 use pocketmine\event\server\DataPacketSendEvent;
 use pocketmine\event\world\WorldLoadEvent;
@@ -444,8 +446,8 @@ class EventListener implements Listener
         if ($player instanceof Player) {
             $this->onEventOnMove($player, $event);
 
-            if (MyPlot::essentialsExists() && !$player->hasPermission(Permissions::RANK_VOTER) && $event->getTo()->getWorld()->getFolderName() === 'MEGA') {
-                $player->sendMessage('§cYou must vote to access Mega Creative.');
+            if (!$player->hasPermission(MyPlotPermissions::RANK_VOTER) && $event->getTo()->getWorld()->getFolderName() === 'MEGA') {
+                $this->plugin->sendError($player, 'You need the MyPlot voter permission to access Mega Creative.');
                 $event->cancel();
             }
         }
@@ -570,6 +572,16 @@ class EventListener implements Listener
                 }
             }
         }
+    }
+
+    public function onPlayerJoin(PlayerJoinEvent $event): void
+    {
+        $this->plugin->syncVanishedPlayersFor($event->getPlayer());
+    }
+
+    public function onPlayerQuit(PlayerQuitEvent $event): void
+    {
+        $this->plugin->clearVanishedState($event->getPlayer());
     }
 
     public function onEat(PlayerItemConsumeEvent $event): void

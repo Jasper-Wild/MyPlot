@@ -20,9 +20,9 @@ use MyPlot\provider\SQLiteDataProvider;
 use MyPlot\task\CleanEntitiesTask;
 use MyPlot\task\ClearPlotTask;
 use MyPlot\task\FillPlotTask;
-use NetherGames\NGEssentials\NGEssentials;
 use pocketmine\block\Block;
 use pocketmine\block\BlockTypeIds;
+use pocketmine\command\CommandSender;
 use pocketmine\data\bedrock\BiomeIds;
 use pocketmine\event\world\WorldLoadEvent;
 use pocketmine\item\ItemTypeIds;
@@ -46,12 +46,18 @@ use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
 use function abs;
 use function array_filter;
-use function class_exists;
+use function array_key_exists;
 use function count;
+use function is_bool;
 use function is_numeric;
+use function is_string;
+use function max;
+use function min;
 use function str_starts_with;
+use function strtolower;
 use function strlen;
 use function substr;
+use function trim;
 use const PHP_INT_MAX;
 
 class MyPlot extends PluginBase
@@ -68,10 +74,11 @@ class MyPlot extends PluginBase
         ItemTypeIds::LINGERING_POTION,
         ItemTypeIds::SPLASH_POTION,
     ];
-    private NGEssentials $ess;
     private DataProvider $dataProvider;
     private Language $Language;
     private Commands $commands;
+    /** @var true[] */
+    private array $vanishedPlayers = [];
 
     // in PM5, item ID for a block is negative
     /** @var PlotLevelSettings[] $worlds */
@@ -116,29 +123,177 @@ class MyPlot extends PluginBase
      */
     public function generateWorld(string $levelName, string $generator = MyPlotGenerator::NAME, array $settings = []): bool
     {
+        $generator = $this->normalizeGeneratorName($generator);
         $ev = new MyPlotGenerationEvent($levelName, $generator, $settings);
         $ev->call();
         if ($ev->isCancelled() or $this->getServer()->getWorldManager()->isWorldGenerated($levelName)) {
             return false;
         }
-        $generator = GeneratorManager::getInstance()->getGenerator($generator);
-        if (count($settings) === 0) {
-            $this->getConfig()->reload();
-            $settings = $this->getConfig()->get("DefaultWorld", []);
+        $generatorEntry = GeneratorManager::getInstance()->getGenerator($generator);
+        if ($generatorEntry === null) {
+            $this->getLogger()->warning("Tried to generate world \"$levelName\" with unknown generator \"$generator\".");
+            return false;
         }
-        $default = array_filter((array)$this->getConfig()->get("DefaultWorld", []), function ($key): bool {
+        $settings = count($settings) === 0 ? $this->getDefaultWorldSettings() : $this->normalizeWorldSettings($settings);
+        $worldSettings = array_filter($settings, function ($key): bool {
             return !in_array($key, ["PlotSize", "GroundHeight", "RoadWidth", "RoadBlock", "WallBlock", "PlotFloorBlock", "PlotFillBlock", "BottomBlock"], true);
         }, ARRAY_FILTER_USE_KEY);
-        new Config($this->getDataFolder() . "worlds" . DIRECTORY_SEPARATOR . $levelName . ".yml", Config::YAML, $default);
-        $return = $this->getServer()->getWorldManager()->generateWorld($levelName, WorldCreationOptions::create()->setGeneratorClass($generator->getGeneratorClass())->setGeneratorOptions(json_encode($settings)), true);
+        new Config($this->getDataFolder() . "worlds" . DIRECTORY_SEPARATOR . $levelName . ".yml", Config::YAML, $worldSettings);
+        $return = $this->getServer()->getWorldManager()->generateWorld($levelName, WorldCreationOptions::create()->setGeneratorClass($generatorEntry->getGeneratorClass())->setGeneratorOptions(json_encode($settings)), true);
         $level = $this->getServer()->getWorldManager()->getWorldByName($levelName);
-        $level?->setSpawnLocation(new Vector3(0, $this->getConfig()->getNested("DefaultWorld.GroundHeight", 64) + 1, 0));
+        $level?->setSpawnLocation(new Vector3(0, ((int) ($settings["GroundHeight"] ?? 64)) + 1, 0));
         return $return;
+    }
+
+    /**
+     * @return mixed[]
+     */
+    public function getDefaultWorldSettings(): array
+    {
+        return $this->normalizeWorldSettings((array) $this->getConfig()->get("DefaultWorld", []));
+    }
+
+    /**
+     * @param mixed[] $settings
+     * @return mixed[]
+     */
+    public function normalizeWorldSettings(array $settings): array
+    {
+        $defaults = (array) $this->getConfig()->get("DefaultWorld", []);
+        $normalized = [];
+
+        foreach ($defaults as $key => $defaultValue) {
+            $value = array_key_exists($key, $settings) ? $settings[$key] : $defaultValue;
+
+            if (is_bool($defaultValue)) {
+                $normalized[$key] = $this->normalizeBooleanSetting($value, $defaultValue);
+            } elseif (is_numeric($defaultValue)) {
+                $normalized[$key] = $this->normalizeIntegerSetting($value, (int) $defaultValue);
+            } elseif (is_string($defaultValue)) {
+                $stringValue = trim((string) $value);
+                $normalized[$key] = $stringValue !== "" ? $stringValue : $defaultValue;
+            } else {
+                $normalized[$key] = $value;
+            }
+        }
+
+        $normalized["PlotSize"] = max(1, (int) ($normalized["PlotSize"] ?? 32));
+        $normalized["RoadWidth"] = max(1, (int) ($normalized["RoadWidth"] ?? 7));
+        $normalized["GroundHeight"] = min(World::Y_MAX - 2, max(1, (int) ($normalized["GroundHeight"] ?? 64)));
+
+        return $normalized;
+    }
+
+    public function normalizeBooleanInput(mixed $value, bool $default = false): bool
+    {
+        return $this->normalizeBooleanSetting($value, $default);
+    }
+
+    private function normalizeBooleanSetting(mixed $value, bool $default): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return match (strtolower(trim((string) $value))) {
+            "1", "true", "yes", "on", "y" => true,
+            "0", "false", "no", "off", "n" => false,
+            default => $default,
+        };
+    }
+
+    private function normalizeIntegerSetting(mixed $value, int $default): int
+    {
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        $stringValue = trim((string) $value);
+        return $stringValue !== "" && is_numeric($stringValue) ? (int) $stringValue : $default;
+    }
+
+    public function normalizeGeneratorName(string $generator): string
+    {
+        $generator = trim(strtolower($generator));
+        return $generator !== "" ? $generator : MyPlotGenerator::NAME;
+    }
+
+    public function isGeneratorRegistered(string $generator): bool
+    {
+        return GeneratorManager::getInstance()->getGenerator($this->normalizeGeneratorName($generator)) !== null;
     }
 
     public static function getInstance(): self
     {
         return self::$instance;
+    }
+
+    public function getPrefix(): string
+    {
+        return TF::GRAY . "[" . TF::AQUA . "MyPlot" . TF::GRAY . "] " . TF::RESET;
+    }
+
+    public function sendSuccess(CommandSender $sender, string $message): void
+    {
+        $sender->sendMessage($this->getPrefix() . TF::GREEN . $message);
+    }
+
+    public function sendInfo(CommandSender $sender, string $message): void
+    {
+        $sender->sendMessage($this->getPrefix() . TF::YELLOW . $message);
+    }
+
+    public function sendError(CommandSender $sender, string $message): void
+    {
+        $sender->sendMessage($this->getPrefix() . TF::RED . $message);
+    }
+
+    public function matchOnlinePlayer(string $name): ?Player
+    {
+        return $this->getServer()->getPlayerExact($name) ?? $this->getServer()->getPlayerByPrefix($name);
+    }
+
+    public function isVanished(Player|string $player): bool
+    {
+        $name = $player instanceof Player ? $player->getName() : $player;
+        return isset($this->vanishedPlayers[strtolower($name)]);
+    }
+
+    public function setVanished(Player $player, bool $vanished): void
+    {
+        $key = strtolower($player->getName());
+
+        if ($vanished) {
+            $this->vanishedPlayers[$key] = true;
+            foreach ($this->getServer()->getOnlinePlayers() as $onlinePlayer) {
+                if ($onlinePlayer !== $player) {
+                    $onlinePlayer->hidePlayer($player);
+                }
+            }
+            return;
+        }
+
+        unset($this->vanishedPlayers[$key]);
+        foreach ($this->getServer()->getOnlinePlayers() as $onlinePlayer) {
+            if ($onlinePlayer !== $player) {
+                $onlinePlayer->showPlayer($player);
+            }
+        }
+    }
+
+    public function syncVanishedPlayersFor(Player $viewer): void
+    {
+        foreach ($this->getServer()->getOnlinePlayers() as $onlinePlayer) {
+            if ($onlinePlayer !== $viewer && $this->isVanished($onlinePlayer)) {
+                $viewer->hidePlayer($onlinePlayer);
+            }
+        }
+    }
+
+    public function clearVanishedState(Player|string $player): void
+    {
+        $name = $player instanceof Player ? $player->getName() : $player;
+        unset($this->vanishedPlayers[strtolower($name)]);
     }
 
     /**
@@ -938,11 +1093,6 @@ class MyPlot extends PluginBase
         return $this->database;
     }
 
-    public function getEssentials(): NGEssentials
-    {
-        return $this->ess;
-    }
-
     public function getCommands(): Commands
     {
         return $this->commands;
@@ -972,7 +1122,8 @@ class MyPlot extends PluginBase
         $this->reloadConfig();
         @mkdir($this->getDataFolder() . "worlds");
         $this->getLogger()->debug(TF::BOLD . "Loading MyPlot Generator");
-        GeneratorManager::getInstance()->addGenerator(MyPlotGenerator::class, "myplot", fn() => null, true);
+        // This generator is lightweight and safer to run on the main thread than through async workers.
+        GeneratorManager::getInstance()->addGenerator(MyPlotGenerator::class, MyPlotGenerator::NAME, fn() => null, overwrite: true, fast: true);
         $this->getLogger()->debug(TF::BOLD . "Loading Languages");
         // Loading Languages
         /** @var string $lang */
@@ -1051,19 +1202,9 @@ class MyPlot extends PluginBase
 
     protected function onEnable(): void
     {
-        $ess = $this->getServer()->getPluginManager()->getPlugin('NGEssentials');
-        if(!$ess instanceof NGEssentials) {
-            $this->getServer()->getPluginManager()->disablePlugin($this);
-            $this->getServer()->shutdown();
-            self::$instance = null;
-            return;
-        }
-
         if($this->isDisabled()) {
             return;
         }
-
-        $this->ess = $ess;
 
         foreach (["Creative", "MEGA", "Platinum", "p1"] as $world) {
             $this->getServer()->getWorldManager()->loadWorld($world, true);
@@ -1075,9 +1216,7 @@ class MyPlot extends PluginBase
         $this->commands = new Commands($this);
         $this->getServer()->getCommandMap()->register("myplot", $this->commands);
 
-        if (self::essentialsExists()) {
-            BaseCommand::registerCommands($this);
-        }
+        BaseCommand::registerCommands($this);
 
         $this->getLogger()->debug(TF::BOLD . "Loading Events");
         $eventListener = new EventListener($this);
@@ -1090,11 +1229,6 @@ class MyPlot extends PluginBase
 
         $this->database->postInit();
         $this->getLogger()->debug(TF::BOLD . TF::GREEN . "Enabled!");
-    }
-
-    public static function essentialsExists(): bool
-    {
-        return class_exists("NetherGames\NGEssentials\NGEssentials");
     }
 
     protected function onDisable(): void

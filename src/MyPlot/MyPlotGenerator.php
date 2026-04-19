@@ -24,7 +24,7 @@ class MyPlotGenerator extends Generator
     protected Block $wallBlock;
     protected int $roadWidth = 7;
     protected int $groundHeight = 64;
-    protected int $plotSize = 32;
+    protected int $plotSize = 32*5;
 
     /**
      * MyPlotGenerator constructor.
