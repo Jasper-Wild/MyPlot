@@ -205,7 +205,10 @@ class EventListener implements Listener
     {
         $entity = $event->getEntity();
         if (!$entity instanceof Player) {
-            $entity->flagForDespawn();
+            $levelName = $entity->getWorld()->getFolderName();
+            if ($this->plugin->isLevelLoaded($levelName)) {
+                $entity->flagForDespawn();
+            }
         }
     }
 
